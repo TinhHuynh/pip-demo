@@ -78,17 +78,25 @@ class _PlayVideoFromYoutubeState extends State<PlayVideoFromYoutube>
   @override
   void initState() {
     WidgetsBinding.instance.addObserver(this);
-    controller = PodPlayerController(
-      playVideoFrom: PlayVideoFrom.youtube(
-          'https://www.youtube.com/watch?v=tlJHdLvLtfM&ab_channel=GTX1050Ti'),
-    )..initialise();
+
+    if (VideoOverlay.showing() && VideoOverlay.controller() != null) {
+      controller = VideoOverlay.controller()!;
+    } else {
+      controller = PodPlayerController(
+        playVideoFrom: PlayVideoFrom.youtube(
+            'https://www.youtube.com/watch?v=tlJHdLvLtfM&ab_channel=GTX1050Ti'),
+      )..initialise();
+    }
+    VideoOverlay.hide();
     super.initState();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    controller.dispose();
+    if (!VideoOverlay.showing()) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -110,30 +118,22 @@ class _PlayVideoFromYoutubeState extends State<PlayVideoFromYoutube>
   PIPViewState? pipState;
 
   @override
-  Widget build(BuildContext context) => PIPView(
-      floatingHeight: 160,
-      floatingWidth: 90,
-      builder: (context, isFloating) {
-        return PiPBuilder(
-            pip: FlPiP(),
-            builder: (PiPStatus status) {
-              return Scaffold(
-                appBar: isFloating || FlPiP().status.value == PiPStatus.enabled
-                    ? null
-                    : AppBar(
-                        leading: IconButton(
-                            onPressed: () {
-                              pipState = PIPView.of(context);
-                              PIPView.of(context)
-                                  ?.presentBelow(const FirstScreen(
-                                enable: false,
-                              ));
-                            },
-                            icon: const Icon(Icons.arrow_left_outlined)),
-                      ),
-                body: player,
-              );
-            });
+  Widget build(BuildContext context) => PiPBuilder(
+      pip: FlPiP(),
+      builder: (PiPStatus status) {
+        return Scaffold(
+          appBar: FlPiP().status.value == PiPStatus.enabled
+              ? null
+              : AppBar(
+                  leading: IconButton(
+                      onPressed: () {
+                        VideoOverlay.showOverlay(context, controller);
+                        Navigator.pop(context);
+                      },
+                      icon: const Icon(Icons.arrow_left_outlined)),
+                ),
+          body: player,
+        );
       });
 
   Widget get player => PodVideoPlayer(
@@ -154,4 +154,104 @@ class _PlayVideoFromYoutubeState extends State<PlayVideoFromYoutube>
           },
           label: const Text('PiP unavailable')),
       appBar: AppBar(title: const Text("PiP unavailable")));
+}
+
+class VideoOverlay {
+  static final VideoOverlay _instance = VideoOverlay();
+  OverlayEntry? _overlay;
+  PodPlayerController? _controller;
+
+  static showOverlay(BuildContext context, PodPlayerController controller) {
+    hide();
+    _instance._controller = controller;
+    _instance._overlay = OverlayEntry(
+        builder: (context) => DraggableOverlayWidget(
+              height: 90 * 2,
+              width: 160 * 2,
+              snapThreshold: MediaQuery.of(context).size.height,
+              child: PodVideoPlayer(controller: _instance._controller!),
+            ));
+    Overlay.maybeOf(context)?.insert(_instance._overlay!);
+  }
+
+  static hide() {
+    _instance._controller = null;
+    _instance._overlay?.remove();
+    _instance._overlay = null;
+  }
+
+  static bool showing() {
+    return _instance._overlay?.mounted ?? false;
+  }
+
+  static PodPlayerController? controller() {
+    return _instance._controller;
+  }
+}
+
+class DraggableOverlayWidget extends StatefulWidget {
+  const DraggableOverlayWidget(
+      {super.key,
+      required this.child,
+      required this.height,
+      required this.width,
+      required this.snapThreshold});
+
+  final Widget child;
+  final double height;
+  final double width;
+  final double snapThreshold;
+
+  @override
+  _DraggableOverlayWidgetState createState() => _DraggableOverlayWidgetState();
+}
+
+class _DraggableOverlayWidgetState extends State<DraggableOverlayWidget> {
+  Offset _offset = const Offset(100, 100);
+  bool _snap = false;
+
+  _DraggableOverlayWidgetState();
+
+  void _snapToEdge(Size screenSize) {
+    double x = _offset.dx;
+    double y = _offset.dy;
+
+    if (x < widget.snapThreshold) {
+      x = 0;
+    } else if (x > screenSize.width - widget.snapThreshold - widget.width) {
+      x = screenSize.width - widget.width;
+    }
+    setState(() {
+      _offset = Offset(x, y);
+      _snap = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Size screenSize = MediaQuery.of(context).size;
+
+    return AnimatedPositioned(
+      left: _offset.dx,
+      top: _offset.dy,
+      duration: Duration(milliseconds: _snap ? 200 : 0),
+      onEnd: () {
+        _snap = false;
+      },
+      child: GestureDetector(
+          onPanUpdate: (details) {
+            setState(() {
+              _offset = Offset(
+                _offset.dx + details.delta.dx,
+                _offset.dy + details.delta.dy,
+              );
+            });
+          },
+          onPanEnd: (_) {
+            _snapToEdge(screenSize);
+          },
+          child: SizedBox(
+              width: widget.width, height: widget.height, child: widget.child)),
+    );
+  }
 }
