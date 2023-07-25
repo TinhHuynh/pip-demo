@@ -98,11 +98,11 @@ class _PlayVideoFromYoutubeState extends State<PlayVideoFromYoutube>
     final isBackground = state == AppLifecycleState.inactive;
     if (isBackground) {
       pipState?.stopFloating();
-      if(FlPiP().status.value != PiPStatus.enabled){
+      if (FlPiP().status.value != PiPStatus.enabled) {
         FlPiP().enable(
             iosConfig: FlPiPiOSConfig(),
             androidConfig:
-            FlPiPAndroidConfig(aspectRatio: const Rational.vertical()));
+                FlPiPAndroidConfig(aspectRatio: const Rational(90, 160)));
       }
     }
   }
@@ -110,7 +110,10 @@ class _PlayVideoFromYoutubeState extends State<PlayVideoFromYoutube>
   PIPViewState? pipState;
 
   @override
-  Widget build(BuildContext context) => PIPView(builder: (context, isFloating) {
+  Widget build(BuildContext context) => PIPView(
+      floatingHeight: 160,
+      floatingWidth: 90,
+      builder: (context, isFloating) {
         return PiPBuilder(
             pip: FlPiP(),
             builder: (PiPStatus status) {
@@ -120,10 +123,11 @@ class _PlayVideoFromYoutubeState extends State<PlayVideoFromYoutube>
                     : AppBar(
                         leading: IconButton(
                             onPressed: () {
-                              FlPiP().enable(
-                                  iosConfig: FlPiPiOSConfig(),
-                                  androidConfig:
-                                  FlPiPAndroidConfig(aspectRatio: const Rational.vertical()));
+                              pipState = PIPView.of(context);
+                              PIPView.of(context)
+                                  ?.presentBelow(const FirstScreen(
+                                enable: false,
+                              ));
                             },
                             icon: const Icon(Icons.arrow_left_outlined)),
                       ),
